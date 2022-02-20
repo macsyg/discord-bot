@@ -250,31 +250,5 @@ async def custom(ctx):
     if not ctx.voice_client.is_playing():
         await quiz(ctx)
 
-        
-
-
-
-
-# @client.command()
-# async def doktor(ctx):
-#     if ctx.voice_client is None:
-#         return
-    
-#     voice_channel = ctx.message.author.voice.channel
-#     await voice_channel.connect()
-
-#     info = await search_song('jungle girl bass boosted extreme')
-
-#     song = {
-#         'title': info['formats'][0]['url'],
-#         'url': info['title']
-#     }
-
-#     ffmpeg_jggirl_opts = {
-#         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-#         'options': '-vn -ss 00:02:12.75 -t 8'
-#     }
-
-#     source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_jggirl_opts)
 
 client.run(TOKEN)
