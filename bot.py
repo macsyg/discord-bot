@@ -23,24 +23,34 @@ async def on_message(message):
         return
 
     if status.mode == 'quiz':
-        print(message.content + ' --- ' + status.quiz.song_title)
+        print(message.content + ' --- ' + status.quiz.current_song_title)
+
+        if message.content.lower() == status.quiz.current_song_title and status.quiz.current_song_guessed == False:
+            status.guess_song(message.author.mention)
+            await message.channel.send(content=(f'{message.author.mention} guessed!'))
+            await message.channel.send(content=(f'**Songs played**: {status.quiz.song_id} / {status.quiz.size}'))
+            await message.channel.send(content=(f'**Title**: {status.quiz.current_song_title}'))
+            await message.channel.send(content=(f'**URL**: {status.quiz.current_song_url}'))
+
+            status.incr_quiz_song_id()
+
+            ctx = await client.get_context(message)
+            ctx.voice_client.stop()
+
         if message.content == 'skip' or message.content == 'pass':
             status.add_skip(message.author.name)
-            await message.channel.send(content=(f'Skips: {status.quiz.skips}/{status.quiz.skips_needed}'))
+            await message.channel.send(content=(f'**Skips**: {status.quiz.skips}/{status.quiz.skips_needed}'))
         
-        if status.quiz.skips >= status.quiz.skips_needed:
-            await message.channel.send(content=('**Song skipped**'))
-            await message.channel.send(content=('It was: ' + f'**{status.quiz.song_title}**'))
-            status.clear_skips()
-            ctx = await client.get_context(message)
-            ctx.voice_client.stop()
+            if status.quiz.skips >= status.quiz.skips_needed:
+                await message.channel.send(content=('**Song skipped**'))
+                await message.channel.send(content=(f'**Title**: {status.quiz.current_song_title}'))
+                await message.channel.send(content=(f'**URL**: {status.quiz.current_song_url}'))
 
-        if message.content.lower() == status.quiz.song_title:
-            status.guess_song(message.author.name)
-            await message.channel.send(content=(f'{message.author.name}! Correct!'))
-
-            ctx = await client.get_context(message)
-            ctx.voice_client.stop()
+                status.incr_quiz_song_id()
+                status.clear_skips()
+                
+                ctx = await client.get_context(message)
+                ctx.voice_client.stop()
 
     # elif message.content == 'test':
     #     ctx = await client.get_context(message)
@@ -62,6 +72,11 @@ async def shutdown(ctx):
 
 @client.command()
 async def play(ctx):
+    if status.mode == 'quiz':
+        return
+
+    status.change_mode('music')
+
     query = ctx.message.content.replace('.play ', '')
 
     if ctx.voice_client is None:
@@ -138,6 +153,7 @@ async def check_queue(ctx):
 
         await play_song(ctx, song)
     else:
+        status.change_mode('afk')
         try:
             await ctx.voice_client.disconnect()
         except:
@@ -165,12 +181,13 @@ async def play_song(ctx, song):
 
 
 async def quiz(ctx):
+
     elem = None
-    with open('./data.json', 'r') as f:
+    with open('./data.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
         elem = data.pop(0)
         data.append(elem)
-        with open('./data.json', 'w') as f1:
+        with open('./data.json', 'w', encoding='utf-8') as f1:
             f1.write(json.dumps(data, indent=4))
 
     ytdl_url_opts = {'format': 'bestaudio', 
@@ -180,13 +197,12 @@ async def quiz(ctx):
     except:
         await quiz(ctx)
 
-    status.incr_quiz_song_id()
-
     print(status.quiz.song_id)
     if status.quiz.song_id > status.quiz.size:
-        await ctx.message.channel.send(content=('Quiz ended'))
+        # await ctx.message.channel.send(content=('Quiz ended'))
         await ctx.message.channel.send(content=(status.show_leaderboard()))
         await ctx.voice_client.disconnect()
+        status.change_mode('afk')
         return
 
     song = {
@@ -194,7 +210,7 @@ async def quiz(ctx):
         'url': info['formats'][0]['url']
     }
 
-    status.set_title(elem['title'])
+    status.set_song(elem['title'], elem['link'])
     await quiz_song(ctx, song)
 
 
@@ -209,19 +225,24 @@ async def quiz_song(ctx, song):
     try:
         ctx.voice_client.play(source, after=lambda error: client.loop.create_task(quiz(ctx)))
     except:
-        await ctx.message.channel.send(content=('Error'), 
-                                       delete_after=10)
+        # await ctx.message.channel.send(content=('Error'), 
+        #                                delete_after=10)
+        print('cos sie rozejbalo')
 
 
 @client.command()
 async def custom(ctx):
+    if status.mode == 'music':
+        return
+
+    status.change_mode('quiz')
+
     if ctx.voice_client is not None:
         return
     else:
         voice_channel = ctx.message.author.voice.channel
         await voice_channel.connect()
 
-    status.change_mode('quiz')
     context = ctx.message.content.replace('.custom ', '')
     args = context.split(' ')
 
@@ -231,7 +252,7 @@ async def custom(ctx):
         else:
             status.set_quiz(size = int(args[0]))
 
-    with open('./data.json', 'r') as f:
+    with open('./data.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
 
         current_index = len(data)
@@ -244,7 +265,7 @@ async def custom(ctx):
             [data[current_index], data[random_index]] = [
             data[random_index], data[current_index]]
 
-        with open('./data.json', 'w') as f1:
+        with open('./data.json', 'w', encoding='utf-8') as f1:
             f1.write(json.dumps(data, indent=4))  
 
     if not ctx.voice_client.is_playing():
