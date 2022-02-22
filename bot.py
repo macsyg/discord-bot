@@ -4,8 +4,8 @@ from discord import voice_client
 from discord.ext import commands
 import youtube_dl
 
-TOKEN = os.getenv('TOKEN')
-PREFIX = os.getenv('PREFIX')
+TOKEN = os.getenv('TOKEN') # your discord bot token generated through Discord Developers Portal
+PREFIX = os.getenv('PREFIX') # any prefix you want that will make bot recognize command use
 
 
 client = commands.Bot(command_prefix=PREFIX)
@@ -25,19 +25,19 @@ async def on_message(message):
         print(message.content + ' --- ' + status.quiz.current_song_title)
 
         if message.content.lower() == status.quiz.current_song_title and status.quiz.current_song_guessed == False:
-            status.guess_song(message.author.mention)
+            status.quiz.guess_song(message.author.mention)
             await message.channel.send(content=(f'{message.author.mention} guessed!'))
             await message.channel.send(content=(f'**Songs played**: {status.quiz.song_id} / {status.quiz.size}'))
             await message.channel.send(content=(f'**Title**: {status.quiz.current_song_title}'))
             await message.channel.send(content=(f'**URL**: {status.quiz.current_song_url}'))
 
-            status.incr_quiz_song_id()
+            status.quiz.incr_song_id()
 
             ctx = await client.get_context(message)
             ctx.voice_client.stop()
 
         if message.content == 'skip' or message.content == 'pass':
-            status.add_skip(message.author.name)
+            status.quiz.add_skip(message.author.name)
             await message.channel.send(content=(f'**Skips**: {status.quiz.skips}/{status.quiz.skips_needed}'))
         
             if status.quiz.skips >= status.quiz.skips_needed:
@@ -45,8 +45,8 @@ async def on_message(message):
                 await message.channel.send(content=(f'**Title**: {status.quiz.current_song_title}'))
                 await message.channel.send(content=(f'**URL**: {status.quiz.current_song_url}'))
 
-                status.incr_quiz_song_id()
-                status.clear_skips()
+                status.quiz.incr_song_id()
+                status.quiz.clear_skips()
                 
                 ctx = await client.get_context(message)
                 ctx.voice_client.stop()
@@ -86,8 +86,11 @@ async def play(ctx):
         if info is None:
             return await ctx.message.channel.send('No song found')
     else:
-        ytdl_url_opts = {'format': 'bestaudio', 
-                         'age_limit': 30}
+        ytdl_url_opts = {
+            'format': 'bestaudio', 
+            'age_limit': 30
+        }
+
         info = youtube_dl.YoutubeDL(ytdl_url_opts).extract_info(query, download=False)
 
     song = {
@@ -166,7 +169,6 @@ async def play_song(ctx, song):
         ctx.voice_client.play(source, 
                               after=lambda error: client.loop.create_task(check_queue(ctx))) # after song ends or something goes wrong try playing next song 
 
-        # ctx.voice_client.play(source, after=None)
         await ctx.message.channel.send(content=('Currently playing: ' + song['title']), 
                                        delete_after=10)
     except:
@@ -194,19 +196,20 @@ async def quiz(ctx):
     except:
         await quiz(ctx)
 
-    print(status.quiz.song_id)
     if status.quiz.song_id > status.quiz.size:
-        await ctx.message.channel.send(content=(status.show_leaderboard()))
+        await ctx.message.channel.send(content=(status.quiz.show_leaderboard()))
         await ctx.voice_client.disconnect()
         status.change_mode('afk')
         return
+
+    print(status.quiz.song_id)
 
     song = {
         'title': info['title'],
         'url': info['formats'][0]['url']
     }
 
-    status.set_song(elem['title'], elem['link'])
+    status.quiz.set_song(elem['title'], elem['link'])
     await quiz_song(ctx, song)
 
 
@@ -244,9 +247,9 @@ async def custom(ctx):
 
     if len(args) > 0:
         if len(args) > 1:
-            status.set_quiz(size = int(args[0]), skips = int(args[1]))
+            status.quiz.set_quiz(size = int(args[0]), skips = int(args[1]))
         else:
-            status.set_quiz(size = int(args[0]))
+            status.quiz.set_quiz(size = int(args[0]))
 
     with open('./data.json', 'r', encoding='utf-8') as f:
         data = json.load(f)

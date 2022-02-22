@@ -25,9 +25,6 @@ class QuizMode:
 
     def incr_song_id(self):
         self.song_id += 1
-
-    def decr_song_id(self):
-        self.song_id -= 1
     
     def add_skip(self, username):
         if username not in self.skippers:
@@ -72,27 +69,3 @@ class Status:
 
     def change_mode(self, new_mode):
         self.mode = new_mode
-
-    def set_song(self, new_title, new_url):
-        self.quiz.set_song(new_title, new_url)
-
-    def set_quiz(self, size=30, skips=1):
-        self.quiz.set_quiz(size, skips)
-    
-    def incr_quiz_song_id(self):
-        self.quiz.incr_song_id()
-    
-    def decr_quiz_song_id(self):
-        self.quiz.decr_song_id()
-
-    def add_skip(self, username):
-        self.quiz.add_skip(username)
-    
-    def clear_skips(self):
-        self.quiz.clear_skips()
-
-    def guess_song(self, username):
-        self.quiz.guess_song(username)
-
-    def show_leaderboard(self):
-        return self.quiz.show_leaderboard()
