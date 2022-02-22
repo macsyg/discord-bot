@@ -18,7 +18,6 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-
     if message.author.bot:
         return
 
@@ -51,10 +50,6 @@ async def on_message(message):
                 
                 ctx = await client.get_context(message)
                 ctx.voice_client.stop()
-
-    # elif message.content == 'test':
-    #     ctx = await client.get_context(message)
-    #     ctx.voice_client.stop()
 
     await client.process_commands(message)
 
@@ -144,7 +139,6 @@ async def search_song(name):
 
 
 async def check_queue(ctx):
-    
     if status.queue != []:
         song = status.queue.pop(0)
 
@@ -165,12 +159,12 @@ async def play_song(ctx, song):
         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
         'options': '-vn'
     }
-    # -ss HH:MM:SS.ss czas, od którego ma polecieć piosenka
+    # "-ss HH:MM:SS.ss" <- this flag, when added to options, starts the song at requested moment
 
     source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_opts)
     try:
         ctx.voice_client.play(source, 
-                              after=lambda error: client.loop.create_task(check_queue(ctx))) # ta linijka daje mozliwosc puszczenia nastepnej piosenki 
+                              after=lambda error: client.loop.create_task(check_queue(ctx))) # after song ends or something goes wrong try playing next song 
 
         # ctx.voice_client.play(source, after=None)
         await ctx.message.channel.send(content=('Currently playing: ' + song['title']), 
@@ -178,10 +172,10 @@ async def play_song(ctx, song):
     except:
         await ctx.message.channel.send(content=('Error'), 
                                        delete_after=10)
+        print('Error')
 
 
 async def quiz(ctx):
-
     elem = None
     with open('./data.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -190,8 +184,11 @@ async def quiz(ctx):
         with open('./data.json', 'w', encoding='utf-8') as f1:
             f1.write(json.dumps(data, indent=4))
 
-    ytdl_url_opts = {'format': 'bestaudio', 
-                         'age_limit': 30}
+    ytdl_url_opts = {
+        'format': 'bestaudio', 
+        'age_limit': 30
+    }
+
     try:
         info = youtube_dl.YoutubeDL(ytdl_url_opts).extract_info(elem['link'], download=False)
     except:
@@ -199,7 +196,6 @@ async def quiz(ctx):
 
     print(status.quiz.song_id)
     if status.quiz.song_id > status.quiz.size:
-        # await ctx.message.channel.send(content=('Quiz ended'))
         await ctx.message.channel.send(content=(status.show_leaderboard()))
         await ctx.voice_client.disconnect()
         status.change_mode('afk')
@@ -225,9 +221,9 @@ async def quiz_song(ctx, song):
     try:
         ctx.voice_client.play(source, after=lambda error: client.loop.create_task(quiz(ctx)))
     except:
-        # await ctx.message.channel.send(content=('Error'), 
-        #                                delete_after=10)
-        print('cos sie rozejbalo')
+        await ctx.message.channel.send(content=('Error'), 
+                                       delete_after=10)
+        print('Error')
 
 
 @client.command()
@@ -257,13 +253,10 @@ async def custom(ctx):
 
         current_index = len(data)
         while current_index != 0:
-            # Pick a remaining element...
             random_index = math.floor(random.random() * current_index)
             current_index -= 1
         
-            # And swap it with the current element.
-            [data[current_index], data[random_index]] = [
-            data[random_index], data[current_index]]
+            [data[current_index], data[random_index]] = [data[random_index], data[current_index]]
 
         with open('./data.json', 'w', encoding='utf-8') as f1:
             f1.write(json.dumps(data, indent=4))  
