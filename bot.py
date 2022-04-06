@@ -90,7 +90,6 @@ async def play(ctx):
             'format': 'bestaudio', 
             'age_limit': 30
         }
-
         info = youtube_dl.YoutubeDL(ytdl_url_opts).extract_info(query, download=False)
 
     song = {
@@ -234,22 +233,25 @@ async def custom(ctx):
     if status.mode == 'music':
         return
 
-    status.change_mode('quiz')
-
-    if ctx.voice_client is not None:
-        return
-    else:
-        voice_channel = ctx.message.author.voice.channel
-        await voice_channel.connect()
-
     context = ctx.message.content.replace('.custom ', '')
     args = context.split(' ')
 
-    if len(args) > 0:
-        if len(args) > 1:
-            status.quiz.set_quiz(size = int(args[0]), skips = int(args[1]))
-        else:
-            status.quiz.set_quiz(size = int(args[0]))
+    try:
+        if len(args) > 0:
+            custom_size = int(args[0])
+            if len(args) > 1:
+                custom_skips = int(args[1])
+                status.quiz.set_quiz(size = custom_size, skips = custom_skips)
+            else:
+                status.quiz.set_quiz(size = custom_size)
+    except:
+        await ctx.message.channel.send(content=('Wrong values'), 
+                                       delete_after=10)
+        return
+
+    status.change_mode('quiz')
+    voice_channel = ctx.message.author.voice.channel
+    await voice_channel.connect()
 
     with open('./data.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
