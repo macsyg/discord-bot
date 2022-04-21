@@ -260,7 +260,6 @@ async def custom(ctx):
         while current_index != 0:
             random_index = math.floor(random.random() * current_index)
             current_index -= 1
-        
             [data[current_index], data[random_index]] = [data[random_index], data[current_index]]
 
         with open('./data.json', 'w', encoding='utf-8') as f1:
