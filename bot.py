@@ -118,6 +118,8 @@ async def stop(ctx):
 async def skip(ctx):
     if ctx.voice_client is None:
         return
+    if status.mode == 'quiz':
+        return
     ctx.voice_client.stop()
 
 
