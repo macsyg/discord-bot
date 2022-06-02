@@ -110,17 +110,24 @@ async def play(ctx):
 
 @client.command()
 async def stop(ctx):
+    if status.mode == 'quiz':
+        return
+
     status.queue = []
     await ctx.voice_client.disconnect()
+    status.change_mode('afk')
 
 
 @client.command()
 async def skip(ctx):
-    if ctx.voice_client is None:
-        return
     if status.mode == 'quiz':
         return
+    
+    if ctx.voice_client is None:
+        return
+
     ctx.voice_client.stop()
+    status.change_mode('afk')
 
 
 async def search_song(name):
@@ -231,7 +238,7 @@ async def quiz_song(ctx, song):
 
 
 @client.command()
-async def custom(ctx):
+async def start_quiz(ctx):
     if status.mode == 'music':
         return
 
@@ -269,6 +276,14 @@ async def custom(ctx):
 
     if not ctx.voice_client.is_playing():
         await quiz(ctx)
+
+@client.command()
+async def stop_quiz(ctx):
+    await ctx.voice_client.disconnect()
+
+    status.change_mode('afk')
+
+    await ctx.message.channel.send(content=(status.quiz.show_leaderboard()))
 
 
 client.run(TOKEN)
