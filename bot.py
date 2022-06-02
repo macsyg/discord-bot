@@ -241,9 +241,11 @@ async def quiz_song(ctx, song):
 async def start_quiz(ctx):
     if status.mode == 'music':
         return
+        
+    args = ctx.message.content.split(' ')
+    args.pop(0)
 
-    context = ctx.message.content.replace('.custom ', '')
-    args = context.split(' ')
+    print(args)
 
     try:
         if len(args) > 0:
