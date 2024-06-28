@@ -3,22 +3,25 @@ class QuizMode:
         self.current_song_title = ''
         self.current_song_url = ''
         self.current_song_guessed = False
+        self.time_passed = False
         self.size = 30
         self.skips_needed = 1
-        self.song_id = 1
+        self.song_id = 0
         self.skips = 0
         self.skippers = []
         self.points = {}
+        self.unavailable = False
 
     def set_song(self, new_title, new_url):
         self.current_song_title = new_title
         self.current_song_url = new_url
         self.current_song_guessed = False
+        self.time_passed = True
 
     def set_quiz(self, size=30, skips=1):
         self.size = size
         self.skips_needed = skips
-        self.song_id = 1
+        self.song_id = 0
         self.skips = 0
         self.skippers = []
         self.points = {}

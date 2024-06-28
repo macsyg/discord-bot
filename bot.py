@@ -1,19 +1,32 @@
 import os, discord, json, math, random
+from dotenv import load_dotenv
 import structure as str
 from discord import voice_client
 from discord.ext import commands
-import youtube_dl
+import yt_dlp
 
+from difflib import SequenceMatcher
+
+from threading import Lock
+
+load_dotenv()
 TOKEN = os.getenv('TOKEN') # your discord bot token generated through Discord Developers Portal
 PREFIX = os.getenv('PREFIX') # any prefix you want that will make bot recognize command use
 
+QUIZ_FILE = os.getenv('QUIZ_FILE')
 
-client = commands.Bot(command_prefix=PREFIX)
+
+client = commands.Bot(command_prefix=PREFIX, intents = discord.Intents.all())
 status = str.Status()
+lock = Lock()
 
 @client.event
 async def on_ready():
     print('Online')
+
+
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()    
 
 
 @client.event
@@ -24,32 +37,49 @@ async def on_message(message):
     if status.mode == 'quiz':
         print(message.content + ' --- ' + status.quiz.current_song_title)
 
-        if message.content.lower() == status.quiz.current_song_title and status.quiz.current_song_guessed == False:
-            status.quiz.guess_song(message.author.mention)
-            await message.channel.send(content=(f'{message.author.mention} guessed!'))
-            await message.channel.send(content=(f'**Songs played**: {status.quiz.song_id} / {status.quiz.size}'))
-            await message.channel.send(content=(f'**Title**: {status.quiz.current_song_title}'))
-            await message.channel.send(content=(f'**URL**: {status.quiz.current_song_url}'))
+        if message.content[0] == '.':
+            pass
 
-            status.quiz.incr_song_id()
-
-            ctx = await client.get_context(message)
-            ctx.voice_client.stop()
-
-        if message.content == 'skip' or message.content == 'pass':
+        elif message.content == 'skip' or message.content == 'pass':
             status.quiz.add_skip(message.author.name)
             await message.channel.send(content=(f'**Skips**: {status.quiz.skips}/{status.quiz.skips_needed}'))
         
             if status.quiz.skips >= status.quiz.skips_needed:
-                await message.channel.send(content=('**Song skipped**'))
-                await message.channel.send(content=(f'**Title**: {status.quiz.current_song_title}'))
-                await message.channel.send(content=(f'**URL**: {status.quiz.current_song_url}'))
 
-                status.quiz.incr_song_id()
+                print('skipped')
+                skip_embed = discord.Embed(
+                    title = f'**It was**:',
+                    description = f'[**{status.quiz.current_song_title}**]({status.quiz.current_song_url})\n' +
+                    f'Songs: {status.quiz.song_id}/{status.quiz.size}\n' +
+                    '**Song was skipped**',
+                )
+
+                await message.channel.send(embed = skip_embed)
+
+                status.quiz.time_passed = False
                 status.quiz.clear_skips()
                 
                 ctx = await client.get_context(message)
                 ctx.voice_client.stop()
+
+
+        elif similar(message.content.lower(), status.quiz.current_song_title.lower()) > 0.9 and status.quiz.current_song_guessed == False:
+            status.quiz.guess_song(message.author.mention)
+
+            guess_embed = discord.Embed(
+                title = f'**It was**:',
+                description = f'[**{status.quiz.current_song_title}**]({status.quiz.current_song_url})\n' +
+                f'Songs: {status.quiz.song_id}/{status.quiz.size}\n' +
+                (f'{message.author.mention} **guessed!**'),
+            )
+
+            await message.channel.send(embed = guess_embed)
+
+            status.quiz.time_passed = False
+            status.quiz.clear_skips()
+
+            ctx = await client.get_context(message)
+            ctx.voice_client.stop()
 
     await client.process_commands(message)
 
@@ -87,20 +117,27 @@ async def play(ctx):
             return await ctx.message.channel.send('No song found')
     else:
         ytdl_url_opts = {
-            'format': 'bestaudio', 
-            'age_limit': 30
+            'format' : 'bestaudio', 
+            'quiet' : True, 
+            'age_limit': 30,
+            'allow_unplayable_formats': False
         }
-        info = youtube_dl.YoutubeDL(ytdl_url_opts).extract_info(query, download=False)
+        info = yt_dlp.YoutubeDL(ytdl_url_opts).extract_info(query, download=False)
 
     song = {
         'title': info['title'],
-        'url': info['formats'][0]['url']
+        'url': info['url'],
+        'original_url': info['original_url']
     }
 
-    song_title = song['title']
-    print(f'Queued: {song_title}')   
-    await ctx.message.channel.send(content=('Queued: ' + song['title']), 
-                                   delete_after=10)
+    song_title = info['title']
+    song_url = info['original_url']
+
+    song_embed = discord.Embed(
+        title = f'Queued:',
+        description = f'[**{song_title}**]({song_url})'
+    )
+    await ctx.message.channel.send(embed = song_embed, delete_after=10)
 
     status.queue.append(song)
 
@@ -129,14 +166,43 @@ async def skip(ctx):
     ctx.voice_client.stop()
     status.change_mode('afk')
 
+@client.command()
+async def queue(ctx):
+    q = status.queue
+    num_elems = len(q)
+    q = q[:10]
+
+    q_str = []
+    i = 1
+    for song in q:
+        title = song['title']
+        url = song['original_url']
+        msg = f'{i}: ' + f'[**{title}**]({url})\n'
+        q_str.append(msg)
+        i += 1
+
+    queue_str = " ".join(q_str)
+
+    queue_embed = discord.Embed(
+        title = f'Next songs:',
+        description = queue_str +
+        ("...\n" if num_elems > 10 else "") + 
+        f'Songs in queue: {num_elems}\n'
+    )
+
+    await ctx.message.channel.send(embed = queue_embed)
+
 
 async def search_song(name):
-    ytdl_query_opts = {'format' : 'bestaudio', 
-                       'quiet' : True, 
-                       'age_limit': 30}
+    ytdl_query_opts = {
+        'format' : 'bestaudio', 
+        'quiet' : True, 
+        'age_limit': 30,
+        'allow_unplayable_formats': False
+    }
 
     info = await client.loop.run_in_executor(None, 
-                                             lambda: youtube_dl.YoutubeDL(ytdl_query_opts).extract_info(f'ytsearch{1}:{name}', 
+                                             lambda: yt_dlp.YoutubeDL(ytdl_query_opts).extract_info(f'ytsearch{1}:{name}', 
                                              download=False, 
                                              ie_key='YoutubeSearch'))
                                              
@@ -172,13 +238,19 @@ async def play_song(ctx, song):
     }
     # "-ss HH:MM:SS.ss" <- this flag, when added to options, starts the song at requested moment
 
+    print(song['url'])
     source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_opts)
     try:
         ctx.voice_client.play(source, 
                               after=lambda error: client.loop.create_task(check_queue(ctx))) # after song ends or something goes wrong try playing next song 
 
-        await ctx.message.channel.send(content=('Currently playing: ' + song['title']), 
-                                       delete_after=10)
+        song_title = song['title']
+        song_url = song['original_url']
+        song_embed = discord.Embed(
+            title = f'Currently playing:',
+            description = f'[**{song_title}**]({song_url})'
+        )
+        await ctx.message.channel.send(embed = song_embed, delete_after=10)
     except:
         await ctx.message.channel.send(content=('Error'), 
                                        delete_after=10)
@@ -186,21 +258,44 @@ async def play_song(ctx, song):
 
 
 async def quiz(ctx):
+
+    if status.mode != 'quiz':
+        return
+
+    if status.quiz.time_passed:
+        guess_embed = discord.Embed(
+            title = f'**It was**:',
+            description = f'[**{status.quiz.current_song_title}**]({status.quiz.current_song_url})\n' +
+            f'Songs: {status.quiz.song_id}/{status.quiz.size}\n' +
+            ('**Time passed!**'),
+        )
+        status.quiz.clear_skips()
+        status.quiz.time_passed = False
+
+        await ctx.message.channel.send(embed = guess_embed)
+
+    if not status.quiz.unavailable:
+        status.quiz.incr_song_id()
+    else:
+        status.quiz.unavailable = False
+
     elem = None
-    with open('./data.json', 'r', encoding='utf-8') as f:
+    with open(QUIZ_FILE, 'r', encoding='utf-8') as f:
         data = json.load(f)
         elem = data.pop(0)
         data.append(elem)
-        with open('./data.json', 'w', encoding='utf-8') as f1:
+        with open(QUIZ_FILE, 'w', encoding='utf-8') as f1:
             f1.write(json.dumps(data, indent=4))
 
-    ytdl_url_opts = {
-        'format': 'bestaudio', 
-        'age_limit': 30
+    ytdl_url_opts =  {
+        'format' : 'bestaudio', 
+        'quiet' : True, 
+        'age_limit': 30,
+        'allow_unplayable_formats': False
     }
 
     try:
-        info = youtube_dl.YoutubeDL(ytdl_url_opts).extract_info(elem['link'], download=False)
+        info = yt_dlp.YoutubeDL(ytdl_url_opts).extract_info(elem['url'], download=False)
     except:
         await quiz(ctx)
 
@@ -212,22 +307,45 @@ async def quiz(ctx):
 
     print(status.quiz.song_id)
 
+
+    what_to_guess = "title"
+
     song = {
         'title': info['title'],
-        'url': info['formats'][0]['url']
+        'url': info['url'],
+        'duration': info['duration_string']
     }
 
-    status.quiz.set_song(elem['title'], elem['link'])
+    status.quiz.set_song(elem[what_to_guess], elem['url'])
     await quiz_song(ctx, song)
 
 
 async def quiz_song(ctx, song):
+
+    mins_secs = song['duration'].split(':')
+    seconds = int(mins_secs[-1]) + int(mins_secs[-2]) * 60
+
+    clip_start = random.randint(seconds//4, seconds//2)
+    clip_start_mins, clip_start_secs = clip_start//60, clip_start%60
+
+    # print(clip_start_mins, clip_start_secs, type(clip_start_mins), type(clip_start_secs))
+
+    clip_start_mins = f'{clip_start_mins}' if clip_start_mins > 9 else f'0{clip_start_mins}'
+    clip_start_secs = f'{clip_start_secs}' if clip_start_secs > 9 else f'0{clip_start_secs}'
+
+
     ffmpeg_opts = {
         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-        'options': '-vn'
+        'options': f'-vn -ss 00:{clip_start_mins}:{clip_start_secs}.00 -t 00:00:30.00',
     }
 
-    source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_opts)
+    # "-ss HH:MM:SS.ss" <- this flag, when added to options, starts the song at requested moment
+
+    try:
+        source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_opts)
+    except:
+        print('Song not available:', song['title'])
+        status.quiz.unavailable = True
 
     try:
         ctx.voice_client.play(source, after=lambda error: client.loop.create_task(quiz(ctx)))
@@ -238,23 +356,13 @@ async def quiz_song(ctx, song):
 
 
 @client.command()
-async def start_quiz(ctx):
+async def start_quiz(ctx, size = 30, skips = 1):
     if status.mode == 'music':
         return
-        
-    args = ctx.message.content.split(' ')
-    args.pop(0)
 
-    print(args)
 
     try:
-        if len(args) > 0:
-            custom_size = int(args[0])
-            if len(args) > 1:
-                custom_skips = int(args[1])
-                status.quiz.set_quiz(size = custom_size, skips = custom_skips)
-            else:
-                status.quiz.set_quiz(size = custom_size)
+        status.quiz.set_quiz(size, skips)
     except:
         await ctx.message.channel.send(content=('Wrong values'), 
                                        delete_after=10)
@@ -264,7 +372,7 @@ async def start_quiz(ctx):
     voice_channel = ctx.message.author.voice.channel
     await voice_channel.connect()
 
-    with open('./data.json', 'r', encoding='utf-8') as f:
+    with open(QUIZ_FILE, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
         current_index = len(data)
@@ -273,7 +381,7 @@ async def start_quiz(ctx):
             current_index -= 1
             [data[current_index], data[random_index]] = [data[random_index], data[current_index]]
 
-        with open('./data.json', 'w', encoding='utf-8') as f1:
+        with open(QUIZ_FILE, 'w', encoding='utf-8') as f1:
             f1.write(json.dumps(data, indent=4))  
 
     if not ctx.voice_client.is_playing():
@@ -286,6 +394,5 @@ async def stop_quiz(ctx):
     status.change_mode('afk')
 
     await ctx.message.channel.send(content=(status.quiz.show_leaderboard()))
-
 
 client.run(TOKEN)
